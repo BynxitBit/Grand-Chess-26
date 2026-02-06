@@ -1,0 +1,41 @@
+# Godot 4+ specific ignores
+.godot/
+
+# Godot-generated files
+*.translation
+
+# Mono-specific ignores
+.mono/
+data_*/
+mono_crash.*.json
+
+# Build exports
+/export/
+/exports/
+*.exe
+*.pck
+*.zip
+*.apk
+*.aab
+
+# IDE / Editor
+.vs/
+.vscode/
+*.sln
+*.csproj.user
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local settings
+.claude/settings.local.json
+CLAUDE.md
+
+# Builds
+./builds
