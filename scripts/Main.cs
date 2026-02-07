@@ -431,7 +431,7 @@ public partial class Main : Node2D
 
         // Keyboard shortcuts
         var shortcutsLabel = new Label();
-        shortcutsLabel.Text = "Scroll: Zoom | Middle/Right-drag: Pan\nR: Reset | F: Flip | 1-4: Modes";
+        shortcutsLabel.Text = "Scroll: Zoom | Middle-drag: Pan\nR: Reset | F: Flip | 1-4: Modes";
         shortcutsLabel.AddThemeColorOverride("font_color", new Color("#666666"));
         shortcutsLabel.AddThemeFontSizeOverride("font_size", 10);
         mainVBox.AddChild(shortcutsLabel);
@@ -669,12 +669,6 @@ public partial class Main : Node2D
                         {
                             _setupEditor.HandleBoardClick(square.Value, true);
                         }
-                    }
-                    else
-                    {
-                        // Right-click pans camera in play mode
-                        _isDragging = true;
-                        _dragStart = mouseButton.Position;
                     }
                 }
                 else
