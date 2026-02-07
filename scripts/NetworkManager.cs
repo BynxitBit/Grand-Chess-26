@@ -1,25 +1,53 @@
 using Godot;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
 
 namespace GrandChess26;
 
+public enum ConnectionPhase
+{
+    Idle,
+    CreatingOffer,
+    WaitingForAnswer,
+    CreatingAnswer,
+    WaitingForConnection,
+    Connected
+}
+
 public partial class NetworkManager : Node
 {
-    public const int DefaultPort = 7777;
     public const int MaxClients = 1; // 1v1 only
 
-    private ENetMultiplayerPeer _peer;
+    private WebRtcMultiplayerPeer _rtcMultiplayer;
+    private WebRtcPeerConnection _rtcPeer;
+    private ConnectionPhase _phase = ConnectionPhase.Idle;
+    private bool _webrtcAvailable = true;
+
+    // ICE gathering
+    private string _localSdpType;
+    private string _localSdp;
+    private readonly List<Dictionary<string, object>> _iceCandidates = new();
+    private double _iceGatherTimer = 0;
+    private const double IceGatherTimeout = 5.0;
+    private bool _iceGatheringStarted = false;
+    private bool _firstCandidateReceived = false;
 
     // Player assignments
     public long HostPeerId { get; private set; } = 1;
     public long ClientPeerId { get; private set; } = 0;
-    public bool IsHost => Multiplayer.IsServer();
-    public bool IsClient => !Multiplayer.IsServer() && Multiplayer.HasMultiplayerPeer();
+    public bool IsHost => _rtcMultiplayer != null && Multiplayer.IsServer();
+    public bool IsClient => _rtcMultiplayer != null && !Multiplayer.IsServer() && Multiplayer.HasMultiplayerPeer();
     public bool IsOnline => Multiplayer.HasMultiplayerPeer();
     public long MyPeerId => Multiplayer.GetUniqueId();
 
     // Host is always White, Client is always Black
     public bool AmIWhite => IsHost;
+
+    public ConnectionPhase Phase => _phase;
 
     [Signal]
     public delegate void ConnectionSucceededEventHandler();
@@ -45,6 +73,12 @@ public partial class NetworkManager : Node
     [Signal]
     public delegate void GameEndedEventHandler(int result);
 
+    [Signal]
+    public delegate void SessionCodeReadyEventHandler(string code);
+
+    [Signal]
+    public delegate void ConnectionPhaseChangedEventHandler(int phase);
+
     public override void _Ready()
     {
         Multiplayer.PeerConnected += OnPeerConnected;
@@ -52,52 +86,385 @@ public partial class NetworkManager : Node
         Multiplayer.ConnectedToServer += OnConnectedToServer;
         Multiplayer.ConnectionFailed += OnConnectionFailed;
         Multiplayer.ServerDisconnected += OnServerDisconnected;
+
+        // Check if WebRTC native extension is loaded
+        var testPeer = new WebRtcPeerConnection();
+        var err = testPeer.Initialize();
+        if (err != Error.Ok)
+        {
+            GD.PrintErr("WebRTC native extension not available. Install addons/webrtc/");
+            _webrtcAvailable = false;
+        }
+        testPeer.Close();
     }
 
-    public Error HostGame(int port = DefaultPort)
-    {
-        _peer = new ENetMultiplayerPeer();
-        var error = _peer.CreateServer(port, MaxClients);
+    public bool IsWebRtcAvailable => _webrtcAvailable;
 
-        if (error != Error.Ok)
+    private Godot.Collections.Dictionary GetIceConfig()
+    {
+        return new Godot.Collections.Dictionary
         {
-            GD.PrintErr($"Failed to create server: {error}");
-            return error;
+            ["iceServers"] = new Godot.Collections.Array
+            {
+                new Godot.Collections.Dictionary
+                {
+                    ["urls"] = new Godot.Collections.Array
+                    {
+                        "stun:stun.l.google.com:19302",
+                        "stun:stun1.l.google.com:19302"
+                    }
+                }
+            }
+        };
+    }
+
+    // === Host Flow ===
+
+    public void HostGame()
+    {
+        if (!_webrtcAvailable)
+        {
+            EmitSignal(SignalName.ConnectionFailed, "WebRTC extension not available");
+            return;
         }
 
-        Multiplayer.MultiplayerPeer = _peer;
+        CleanupRtc();
+
+        _rtcMultiplayer = new WebRtcMultiplayerPeer();
+        _rtcMultiplayer.CreateServer();
+        Multiplayer.MultiplayerPeer = _rtcMultiplayer;
         HostPeerId = 1;
-        GD.Print($"Server started on port {port}");
-        return Error.Ok;
+
+        // Create the peer connection for the joiner (peer ID 2)
+        _rtcPeer = new WebRtcPeerConnection();
+        _rtcPeer.Initialize(GetIceConfig());
+
+        _rtcPeer.SessionDescriptionCreated += OnSessionDescriptionCreated;
+        _rtcPeer.IceCandidateCreated += OnIceCandidateCreated;
+
+        _rtcMultiplayer.AddPeer(_rtcPeer, 2);
+
+        // Reset ICE state
+        _iceCandidates.Clear();
+        _localSdpType = null;
+        _localSdp = null;
+        _iceGatherTimer = 0;
+        _iceGatheringStarted = false;
+        _firstCandidateReceived = false;
+
+        SetPhase(ConnectionPhase.CreatingOffer);
+
+        // Create offer - signals will fire during _Process polling
+        _rtcPeer.CreateOffer();
+
+        GD.Print("Host: Creating WebRTC offer...");
     }
 
-    public Error JoinGame(string address, int port = DefaultPort)
-    {
-        _peer = new ENetMultiplayerPeer();
-        var error = _peer.CreateClient(address, port);
+    // === Join Flow ===
 
-        if (error != Error.Ok)
+    public void JoinGame(string sessionCode)
+    {
+        if (!_webrtcAvailable)
         {
-            GD.PrintErr($"Failed to connect to {address}:{port} - {error}");
-            return error;
+            EmitSignal(SignalName.ConnectionFailed, "WebRTC extension not available");
+            return;
         }
 
-        Multiplayer.MultiplayerPeer = _peer;
-        GD.Print($"Connecting to {address}:{port}...");
-        return Error.Ok;
+        // Decode host's session code
+        SessionData hostData;
+        try
+        {
+            hostData = DecodeSessionCode(sessionCode);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"Failed to decode session code: {e.Message}");
+            EmitSignal(SignalName.ConnectionFailed, "Invalid session code");
+            return;
+        }
+
+        if (hostData.Type != "offer")
+        {
+            EmitSignal(SignalName.ConnectionFailed, "Invalid session code (not a host code)");
+            return;
+        }
+
+        CleanupRtc();
+
+        _rtcMultiplayer = new WebRtcMultiplayerPeer();
+        _rtcMultiplayer.CreateClient(2);
+        Multiplayer.MultiplayerPeer = _rtcMultiplayer;
+
+        // Create the peer connection for the host (peer ID 1)
+        _rtcPeer = new WebRtcPeerConnection();
+        _rtcPeer.Initialize(GetIceConfig());
+
+        _rtcPeer.SessionDescriptionCreated += OnSessionDescriptionCreated;
+        _rtcPeer.IceCandidateCreated += OnIceCandidateCreated;
+
+        _rtcMultiplayer.AddPeer(_rtcPeer, 1);
+
+        // Reset ICE state
+        _iceCandidates.Clear();
+        _localSdpType = null;
+        _localSdp = null;
+        _iceGatherTimer = 0;
+        _iceGatheringStarted = false;
+        _firstCandidateReceived = false;
+
+        SetPhase(ConnectionPhase.CreatingAnswer);
+
+        // Set the host's offer as remote description - this triggers answer generation
+        _rtcPeer.SetRemoteDescription(hostData.Type, hostData.Sdp);
+
+        // Add host's ICE candidates
+        foreach (var candidate in hostData.Candidates)
+        {
+            _rtcPeer.AddIceCandidate(candidate.Media, candidate.Index, candidate.Name);
+        }
+
+        GD.Print("Join: Processing host offer, generating answer...");
+    }
+
+    // === Host applies joiner's answer ===
+
+    public void ApplyAnswerCode(string sessionCode)
+    {
+        if (_phase != ConnectionPhase.WaitingForAnswer)
+        {
+            GD.PrintErr("Not in WaitingForAnswer phase");
+            return;
+        }
+
+        SessionData answerData;
+        try
+        {
+            answerData = DecodeSessionCode(sessionCode);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"Failed to decode answer code: {e.Message}");
+            EmitSignal(SignalName.ConnectionFailed, "Invalid answer code");
+            return;
+        }
+
+        if (answerData.Type != "answer")
+        {
+            EmitSignal(SignalName.ConnectionFailed, "Invalid code (not a response code)");
+            return;
+        }
+
+        // Set the joiner's answer as remote description
+        _rtcPeer.SetRemoteDescription(answerData.Type, answerData.Sdp);
+
+        // Add joiner's ICE candidates
+        foreach (var candidate in answerData.Candidates)
+        {
+            _rtcPeer.AddIceCandidate(candidate.Media, candidate.Index, candidate.Name);
+        }
+
+        SetPhase(ConnectionPhase.WaitingForConnection);
+        GD.Print("Host: Applied answer, waiting for connection...");
     }
 
     public void Disconnect()
     {
-        if (_peer != null)
-        {
-            _peer.Close();
-            Multiplayer.MultiplayerPeer = null;
-            _peer = null;
-        }
+        CleanupRtc();
+        Multiplayer.MultiplayerPeer = null;
         ClientPeerId = 0;
+        SetPhase(ConnectionPhase.Idle);
         GD.Print("Disconnected from network");
     }
+
+    private void CleanupRtc()
+    {
+        if (_rtcPeer != null)
+        {
+            _rtcPeer.SessionDescriptionCreated -= OnSessionDescriptionCreated;
+            _rtcPeer.IceCandidateCreated -= OnIceCandidateCreated;
+            _rtcPeer.Close();
+            _rtcPeer = null;
+        }
+        if (_rtcMultiplayer != null)
+        {
+            _rtcMultiplayer = null;
+        }
+    }
+
+    private void SetPhase(ConnectionPhase phase)
+    {
+        _phase = phase;
+        EmitSignal(SignalName.ConnectionPhaseChanged, (int)phase);
+    }
+
+    // === Process: poll WebRTC and handle ICE gathering timeout ===
+
+    public override void _Process(double delta)
+    {
+        if (_phase == ConnectionPhase.Idle || _phase == ConnectionPhase.Connected)
+            return;
+
+        // Poll is handled by WebRtcMultiplayerPeer when set as multiplayer peer,
+        // but we poll explicitly during signaling to ensure signals fire
+        _rtcPeer?.Poll();
+
+        // ICE gathering timeout
+        if (_iceGatheringStarted && _firstCandidateReceived)
+        {
+            _iceGatherTimer += delta;
+            if (_iceGatherTimer >= IceGatherTimeout)
+            {
+                OnIceGatheringComplete();
+            }
+        }
+
+        // Check gathering state
+        if (_iceGatheringStarted && _rtcPeer != null)
+        {
+            var gatherState = _rtcPeer.GetGatheringState();
+            if (gatherState == WebRtcPeerConnection.GatheringState.Complete)
+            {
+                OnIceGatheringComplete();
+            }
+        }
+
+        // Check for connection during WaitingForConnection phase
+        if (_phase == ConnectionPhase.WaitingForConnection && _rtcPeer != null)
+        {
+            var connState = _rtcPeer.GetConnectionState();
+            if (connState == WebRtcPeerConnection.ConnectionState.Connected)
+            {
+                SetPhase(ConnectionPhase.Connected);
+                GD.Print("WebRTC connection established!");
+            }
+            else if (connState == WebRtcPeerConnection.ConnectionState.Failed)
+            {
+                GD.PrintErr("WebRTC connection failed");
+                Disconnect();
+                EmitSignal(SignalName.ConnectionFailed, "Connection failed (NAT traversal may not be possible)");
+            }
+        }
+    }
+
+    // === WebRTC Signal Handlers ===
+
+    private void OnSessionDescriptionCreated(string type, string sdp)
+    {
+        GD.Print($"Session description created: type={type}");
+        _localSdpType = type;
+        _localSdp = sdp;
+        _rtcPeer.SetLocalDescription(type, sdp);
+
+        // After SetLocalDescription, ICE gathering begins
+        _iceGatheringStarted = true;
+        _iceGatherTimer = 0;
+    }
+
+    private void OnIceCandidateCreated(string media, long index, string name)
+    {
+        _iceCandidates.Add(new Dictionary<string, object>
+        {
+            ["media"] = media,
+            ["index"] = (int)index,
+            ["name"] = name
+        });
+
+        if (!_firstCandidateReceived)
+        {
+            _firstCandidateReceived = true;
+            _iceGatherTimer = 0; // Start timeout from first candidate
+        }
+
+        GD.Print($"ICE candidate gathered ({_iceCandidates.Count} total)");
+    }
+
+    private void OnIceGatheringComplete()
+    {
+        if (_phase != ConnectionPhase.CreatingOffer && _phase != ConnectionPhase.CreatingAnswer)
+            return;
+
+        GD.Print($"ICE gathering complete. {_iceCandidates.Count} candidates collected.");
+
+        // Generate session code
+        string sessionCode = GenerateSessionCode();
+
+        if (_phase == ConnectionPhase.CreatingOffer)
+        {
+            SetPhase(ConnectionPhase.WaitingForAnswer);
+        }
+        else if (_phase == ConnectionPhase.CreatingAnswer)
+        {
+            SetPhase(ConnectionPhase.WaitingForConnection);
+        }
+
+        EmitSignal(SignalName.SessionCodeReady, sessionCode);
+    }
+
+    // === Session Code Encoding/Decoding ===
+
+    private class SessionData
+    {
+        public string Type { get; set; }
+        public string Sdp { get; set; }
+        public List<IceCandidate> Candidates { get; set; } = new();
+    }
+
+    private class IceCandidate
+    {
+        public string Media { get; set; }
+        public int Index { get; set; }
+        public string Name { get; set; }
+    }
+
+    private string GenerateSessionCode()
+    {
+        var data = new SessionData
+        {
+            Type = _localSdpType,
+            Sdp = _localSdp,
+            Candidates = new List<IceCandidate>()
+        };
+
+        foreach (var c in _iceCandidates)
+        {
+            data.Candidates.Add(new IceCandidate
+            {
+                Media = (string)c["media"],
+                Index = (int)c["index"],
+                Name = (string)c["name"]
+            });
+        }
+
+        string json = JsonSerializer.Serialize(data);
+        byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+
+        // Compress with DEFLATE
+        using var output = new MemoryStream();
+        using (var deflate = new DeflateStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            deflate.Write(jsonBytes, 0, jsonBytes.Length);
+        }
+
+        return Convert.ToBase64String(output.ToArray());
+    }
+
+    private static SessionData DecodeSessionCode(string code)
+    {
+        // Clean up whitespace
+        code = code.Trim().Replace("\n", "").Replace("\r", "").Replace(" ", "");
+
+        byte[] compressed = Convert.FromBase64String(code);
+
+        using var input = new MemoryStream(compressed);
+        using var deflate = new DeflateStream(input, CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        deflate.CopyTo(output);
+
+        string json = Encoding.UTF8.GetString(output.ToArray());
+        return JsonSerializer.Deserialize<SessionData>(json);
+    }
+
+    // === Multiplayer Callbacks ===
 
     private void OnPeerConnected(long id)
     {
@@ -108,6 +475,7 @@ public partial class NetworkManager : Node
             ClientPeerId = id;
         }
 
+        SetPhase(ConnectionPhase.Connected);
         EmitSignal(SignalName.PeerConnected, id);
     }
 
@@ -126,6 +494,7 @@ public partial class NetworkManager : Node
     private void OnConnectedToServer()
     {
         GD.Print("Connected to server");
+        SetPhase(ConnectionPhase.Connected);
         EmitSignal(SignalName.ConnectionSucceeded);
     }
 
@@ -133,7 +502,7 @@ public partial class NetworkManager : Node
     {
         GD.Print("Connection failed");
         Disconnect();
-        EmitSignal(SignalName.ConnectionFailed, "Failed to connect to server");
+        EmitSignal(SignalName.ConnectionFailed, "Failed to connect");
     }
 
     private void OnServerDisconnected()

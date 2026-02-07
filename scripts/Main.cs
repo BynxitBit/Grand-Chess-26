@@ -35,11 +35,16 @@ public partial class Main : Node2D
     // Multiplayer UI
     private NetworkManager _networkManager;
     private Control _multiplayerPanel;
-    private LineEdit _ipInput;
     private Button _hostButton;
     private Button _joinButton;
     private Button _disconnectButton;
     private Label _networkStatusLabel;
+    private TextEdit _sessionCodeDisplay;
+    private Button _copyCodeButton;
+    private TextEdit _sessionCodeInput;
+    private Button _applyCodeButton;
+    private Label _sessionCodeLabel;
+    private Label _pasteCodeLabel;
     private bool _waitingForOpponent = false;
     private Vector2I? _pendingMoveFrom = null;
     private Vector2I? _pendingMoveTo = null;
@@ -104,6 +109,8 @@ public partial class Main : Node2D
         _networkManager.MoveRequestReceived += OnNetworkMoveRequestReceived;
         _networkManager.MoveConfirmed += OnNetworkMoveConfirmed;
         _networkManager.GameEnded += OnNetworkGameEnded;
+        _networkManager.SessionCodeReady += OnSessionCodeReady;
+        _networkManager.ConnectionPhaseChanged += OnConnectionPhaseChanged;
 
         // Create camera for panning and zooming
         _camera = new Camera2D();
@@ -535,37 +542,23 @@ public partial class Main : Node2D
         _networkStatusLabel.Text = "Not connected";
         _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#888888"));
         _networkStatusLabel.AddThemeFontSizeOverride("font_size", 11);
+        _networkStatusLabel.AutowrapMode = TextServer.AutowrapMode.Word;
+        _networkStatusLabel.CustomMinimumSize = new Vector2(260, 0);
         _multiplayerPanel.AddChild(_networkStatusLabel);
 
-        // IP input
-        var ipHBox = new HBoxContainer();
-        var ipLabel = new Label();
-        ipLabel.Text = "IP:";
-        ipLabel.AddThemeColorOverride("font_color", new Color("#cccccc"));
-        ipLabel.AddThemeFontSizeOverride("font_size", 12);
-        ipLabel.CustomMinimumSize = new Vector2(25, 0);
-        ipHBox.AddChild(ipLabel);
-
-        _ipInput = new LineEdit();
-        _ipInput.PlaceholderText = "127.0.0.1";
-        _ipInput.Text = "127.0.0.1";
-        _ipInput.CustomMinimumSize = new Vector2(120, 0);
-        ipHBox.AddChild(_ipInput);
-        _multiplayerPanel.AddChild(ipHBox);
-
-        // Buttons
+        // Host / Join / Leave buttons
         var buttonHBox = new HBoxContainer();
         buttonHBox.AddThemeConstantOverride("separation", 4);
 
         _hostButton = new Button();
-        _hostButton.Text = "Host";
-        _hostButton.CustomMinimumSize = new Vector2(60, 28);
+        _hostButton.Text = "Create Game";
+        _hostButton.CustomMinimumSize = new Vector2(90, 28);
         _hostButton.Pressed += OnHostButtonPressed;
         buttonHBox.AddChild(_hostButton);
 
         _joinButton = new Button();
-        _joinButton.Text = "Join";
-        _joinButton.CustomMinimumSize = new Vector2(60, 28);
+        _joinButton.Text = "Join Game";
+        _joinButton.CustomMinimumSize = new Vector2(90, 28);
         _joinButton.Pressed += OnJoinButtonPressed;
         buttonHBox.AddChild(_joinButton);
 
@@ -577,6 +570,61 @@ public partial class Main : Node2D
         buttonHBox.AddChild(_disconnectButton);
 
         _multiplayerPanel.AddChild(buttonHBox);
+
+        // Session code display (read-only, shows generated code)
+        _sessionCodeLabel = new Label();
+        _sessionCodeLabel.Text = "Your session code:";
+        _sessionCodeLabel.AddThemeColorOverride("font_color", new Color("#cccccc"));
+        _sessionCodeLabel.AddThemeFontSizeOverride("font_size", 11);
+        _sessionCodeLabel.Visible = false;
+        _multiplayerPanel.AddChild(_sessionCodeLabel);
+
+        _sessionCodeDisplay = new TextEdit();
+        _sessionCodeDisplay.CustomMinimumSize = new Vector2(260, 60);
+        _sessionCodeDisplay.Editable = false;
+        _sessionCodeDisplay.WrapMode = TextEdit.LineWrappingMode.Boundary;
+        _sessionCodeDisplay.AddThemeFontSizeOverride("font_size", 10);
+        _sessionCodeDisplay.Visible = false;
+        _multiplayerPanel.AddChild(_sessionCodeDisplay);
+
+        _copyCodeButton = new Button();
+        _copyCodeButton.Text = "Copy Code";
+        _copyCodeButton.CustomMinimumSize = new Vector2(90, 28);
+        _copyCodeButton.Pressed += OnCopyCodePressed;
+        _copyCodeButton.Visible = false;
+        _multiplayerPanel.AddChild(_copyCodeButton);
+
+        // Paste area for other player's code
+        _pasteCodeLabel = new Label();
+        _pasteCodeLabel.Text = "Paste other player's code:";
+        _pasteCodeLabel.AddThemeColorOverride("font_color", new Color("#cccccc"));
+        _pasteCodeLabel.AddThemeFontSizeOverride("font_size", 11);
+        _pasteCodeLabel.Visible = false;
+        _multiplayerPanel.AddChild(_pasteCodeLabel);
+
+        _sessionCodeInput = new TextEdit();
+        _sessionCodeInput.CustomMinimumSize = new Vector2(260, 60);
+        _sessionCodeInput.PlaceholderText = "Paste session code here...";
+        _sessionCodeInput.WrapMode = TextEdit.LineWrappingMode.Boundary;
+        _sessionCodeInput.AddThemeFontSizeOverride("font_size", 10);
+        _sessionCodeInput.Visible = false;
+        _multiplayerPanel.AddChild(_sessionCodeInput);
+
+        _applyCodeButton = new Button();
+        _applyCodeButton.Text = "Connect";
+        _applyCodeButton.CustomMinimumSize = new Vector2(90, 28);
+        _applyCodeButton.Pressed += OnApplyCodePressed;
+        _applyCodeButton.Visible = false;
+        _multiplayerPanel.AddChild(_applyCodeButton);
+
+        // Check WebRTC availability
+        if (!_networkManager.IsWebRtcAvailable)
+        {
+            _networkStatusLabel.Text = "WebRTC extension not found. Online multiplayer unavailable.";
+            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ff6666"));
+            _hostButton.Disabled = true;
+            _joinButton.Disabled = true;
+        }
     }
 
     private void CreateSetupEditor()
@@ -664,7 +712,7 @@ public partial class Main : Node2D
         {
             // Don't process keyboard shortcuts when typing in a text field
             var focusedControl = GetViewport().GuiGetFocusOwner();
-            if (focusedControl is LineEdit)
+            if (focusedControl is LineEdit || focusedControl is TextEdit)
             {
                 return;
             }
@@ -1437,47 +1485,120 @@ public partial class Main : Node2D
 
     private void OnHostButtonPressed()
     {
-        var error = _networkManager.HostGame();
-        if (error == Error.Ok)
-        {
-            _networkStatusLabel.Text = "Hosting... Waiting for opponent";
-            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ffff88"));
-            _hostButton.Visible = false;
-            _joinButton.Visible = false;
-            _ipInput.Editable = false;
-            _disconnectButton.Visible = true;
-            _waitingForOpponent = true;
-            UpdateStatusLabel();
-        }
-        else
-        {
-            _networkStatusLabel.Text = $"Failed to host: {error}";
-            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ff6666"));
-        }
+        _networkManager.HostGame();
+        _networkStatusLabel.Text = "Generating session code...";
+        _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ffff88"));
+        _hostButton.Visible = false;
+        _joinButton.Visible = false;
+        _disconnectButton.Visible = true;
+        _waitingForOpponent = true;
+        UpdateStatusLabel();
     }
 
     private void OnJoinButtonPressed()
     {
-        string ip = _ipInput.Text.Trim();
-        if (string.IsNullOrEmpty(ip))
+        // Show paste area for host's code
+        _hostButton.Visible = false;
+        _joinButton.Visible = false;
+        _disconnectButton.Visible = true;
+
+        _pasteCodeLabel.Text = "Paste host's session code:";
+        _pasteCodeLabel.Visible = true;
+        _sessionCodeInput.Visible = true;
+        _sessionCodeInput.Text = "";
+        _applyCodeButton.Text = "Join";
+        _applyCodeButton.Visible = true;
+
+        _networkStatusLabel.Text = "Paste the host's session code and click Join";
+        _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ffff88"));
+    }
+
+    private void OnApplyCodePressed()
+    {
+        string code = _sessionCodeInput.Text.Trim();
+        if (string.IsNullOrEmpty(code))
         {
-            ip = "127.0.0.1";
+            _networkStatusLabel.Text = "Please paste a session code first";
+            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ff6666"));
+            return;
         }
 
-        var error = _networkManager.JoinGame(ip);
-        if (error == Error.Ok)
+        var phase = _networkManager.Phase;
+
+        if (phase == ConnectionPhase.Idle)
         {
-            _networkStatusLabel.Text = $"Connecting to {ip}...";
+            // Joiner applying host's code
+            _networkManager.JoinGame(code);
+            _networkStatusLabel.Text = "Processing host code...";
             _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ffff88"));
-            _hostButton.Visible = false;
-            _joinButton.Visible = false;
-            _ipInput.Editable = false;
-            _disconnectButton.Visible = true;
+            _sessionCodeInput.Visible = false;
+            _applyCodeButton.Visible = false;
+            _pasteCodeLabel.Visible = false;
         }
-        else
+        else if (phase == ConnectionPhase.WaitingForAnswer)
         {
-            _networkStatusLabel.Text = $"Failed to connect: {error}";
-            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ff6666"));
+            // Host applying joiner's answer
+            _networkManager.ApplyAnswerCode(code);
+            _networkStatusLabel.Text = "Connecting...";
+            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#ffff88"));
+            _sessionCodeInput.Visible = false;
+            _applyCodeButton.Visible = false;
+            _pasteCodeLabel.Visible = false;
+        }
+    }
+
+    private void OnCopyCodePressed()
+    {
+        DisplayServer.ClipboardSet(_sessionCodeDisplay.Text);
+        _copyCodeButton.Text = "Copied!";
+    }
+
+    private void OnSessionCodeReady(string code)
+    {
+        _sessionCodeDisplay.Text = code;
+        _sessionCodeLabel.Visible = true;
+        _sessionCodeDisplay.Visible = true;
+        _copyCodeButton.Text = "Copy Code";
+        _copyCodeButton.Visible = true;
+
+        var phase = _networkManager.Phase;
+
+        if (phase == ConnectionPhase.WaitingForAnswer)
+        {
+            // Host: show area for pasting joiner's response
+            _networkStatusLabel.Text = "Send code to opponent, then paste their response below";
+            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#88ff88"));
+
+            _sessionCodeLabel.Text = "Your session code (send to opponent):";
+            _pasteCodeLabel.Text = "Paste opponent's response code:";
+            _pasteCodeLabel.Visible = true;
+            _sessionCodeInput.Visible = true;
+            _sessionCodeInput.Text = "";
+            _applyCodeButton.Text = "Connect";
+            _applyCodeButton.Visible = true;
+        }
+        else if (phase == ConnectionPhase.WaitingForConnection)
+        {
+            // Joiner: show their response code for host
+            _networkStatusLabel.Text = "Send this response code to the host";
+            _networkStatusLabel.AddThemeColorOverride("font_color", new Color("#88ff88"));
+
+            _sessionCodeLabel.Text = "Your response code (send to host):";
+        }
+    }
+
+    private void OnConnectionPhaseChanged(int phase)
+    {
+        var p = (ConnectionPhase)phase;
+        if (p == ConnectionPhase.Connected)
+        {
+            // Hide signaling UI elements
+            _sessionCodeLabel.Visible = false;
+            _sessionCodeDisplay.Visible = false;
+            _copyCodeButton.Visible = false;
+            _pasteCodeLabel.Visible = false;
+            _sessionCodeInput.Visible = false;
+            _applyCodeButton.Visible = false;
         }
     }
 
@@ -1494,9 +1615,17 @@ public partial class Main : Node2D
     {
         _hostButton.Visible = true;
         _joinButton.Visible = true;
-        _ipInput.Editable = true;
         _disconnectButton.Visible = false;
         _waitingForOpponent = false;
+
+        _sessionCodeLabel.Visible = false;
+        _sessionCodeDisplay.Visible = false;
+        _sessionCodeDisplay.Text = "";
+        _copyCodeButton.Visible = false;
+        _pasteCodeLabel.Visible = false;
+        _sessionCodeInput.Visible = false;
+        _sessionCodeInput.Text = "";
+        _applyCodeButton.Visible = false;
     }
 
     private void OnNetworkConnectionSucceeded()
