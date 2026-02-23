@@ -52,6 +52,9 @@ public partial class Main : Node2D
     // Board size UI
     private SpinBox _boardSizeInput;
 
+    // First move distance UI
+    private SpinBox _firstMoveDistanceInput;
+
     // FEN UI
     private LineEdit _fenInput;
     private Label _fenStatusLabel;
@@ -319,6 +322,32 @@ public partial class Main : Node2D
             sizeInfoLabel.Text = "x" + ((int)value).ToString();
         };
         mainVBox.AddChild(boardSizeHBox);
+
+        // First move distance input
+        var firstMoveHBox = new HBoxContainer();
+        var firstMoveLabel = new Label();
+        firstMoveLabel.Text = "1st pawn move:";
+        firstMoveLabel.AddThemeColorOverride("font_color", new Color("#cccccc"));
+        firstMoveLabel.AddThemeFontSizeOverride("font_size", 12);
+        firstMoveLabel.CustomMinimumSize = new Vector2(60, 0);
+        firstMoveHBox.AddChild(firstMoveLabel);
+
+        _firstMoveDistanceInput = new SpinBox();
+        _firstMoveDistanceInput.MinValue = 1;
+        _firstMoveDistanceInput.MaxValue = GetMaxFirstMoveDistance(SetupMode.TwoLines);
+        _firstMoveDistanceInput.Value = Pawn.FirstMoveDistance;
+        _firstMoveDistanceInput.Step = 1;
+        _firstMoveDistanceInput.CustomMinimumSize = new Vector2(80, 0);
+        _firstMoveDistanceInput.TooltipText = "Max squares a pawn can move on its first move (applies on New Game)";
+        _firstMoveDistanceInput.ValueChanged += OnFirstMoveDistanceChanged;
+        firstMoveHBox.AddChild(_firstMoveDistanceInput);
+
+        var firstMoveInfoLabel = new Label();
+        firstMoveInfoLabel.Text = " squares";
+        firstMoveInfoLabel.AddThemeColorOverride("font_color", new Color("#888888"));
+        firstMoveInfoLabel.AddThemeFontSizeOverride("font_size", 11);
+        firstMoveHBox.AddChild(firstMoveInfoLabel);
+        mainVBox.AddChild(firstMoveHBox);
 
         // Piece style selector
         var pieceStyleHBox = new HBoxContainer();
@@ -1154,6 +1183,36 @@ public partial class Main : Node2D
         _fenStatusLabel.AddThemeColorOverride("font_color", new Color("#88ff88"));
     }
 
+    private int GetMaxFirstMoveDistance(SetupMode mode)
+    {
+        // Pawn start rank (white side, 0-indexed): OneLine=1, TwoLines=2, ThreeLines=3, Custom=1
+        int pawnStartRank = mode switch
+        {
+            SetupMode.OneLine => 1,
+            SetupMode.TwoLines => 2,
+            SetupMode.ThreeLines => 3,
+            _ => 1
+        };
+        return Math.Max(1, Board.BoardSize - 1 - pawnStartRank);
+    }
+
+    private void UpdateFirstMoveDistanceMax(SetupMode mode)
+    {
+        int newMax = GetMaxFirstMoveDistance(mode);
+        _firstMoveDistanceInput.MaxValue = newMax;
+        if (_firstMoveDistanceInput.Value > newMax)
+        {
+            _firstMoveDistanceInput.Value = newMax;
+        }
+    }
+
+    private void OnFirstMoveDistanceChanged(double value)
+    {
+        int dist = (int)value;
+        Pawn.FirstMoveDistance = dist;
+        SetupManager.PawnFirstMoveDistance = dist;
+    }
+
     private void OnAutoFlipToggled(bool toggled)
     {
         _autoFlipEnabled = toggled;
@@ -1349,6 +1408,7 @@ public partial class Main : Node2D
 
         if (mode == SetupMode.Custom)
         {
+            UpdateFirstMoveDistanceMax(mode);
             EnterSetupMode();
         }
         else
@@ -1375,6 +1435,7 @@ public partial class Main : Node2D
 
         if (mode == SetupMode.Custom)
         {
+            UpdateFirstMoveDistanceMax(mode);
             EnterSetupMode();
         }
         else
@@ -1448,6 +1509,10 @@ public partial class Main : Node2D
             float boardPixelSize = _board.GetBoardPixelSize();
             _gamePanel.Position = new Vector2(boardPixelSize + 20, 10);
         }
+
+        // Update first move distance max for new board size / mode, then apply
+        UpdateFirstMoveDistanceMax(mode);
+        SetupManager.PawnFirstMoveDistance = (int)_firstMoveDistanceInput.Value;
 
         _gameManager.SetupGame(mode);
         DeselectPiece();

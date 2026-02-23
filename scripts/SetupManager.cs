@@ -16,7 +16,7 @@ public static class SetupManager
 {
     private static Random _random = new Random();
 
-    public static int PawnFirstMoveDistance { get; set; } = 2;
+    public static int PawnFirstMoveDistance { get; set; } = 4;
 
     public static void SetupBoard(Board board, SetupMode mode)
     {
@@ -30,23 +30,19 @@ public static class SetupManager
         {
             case SetupMode.TwoLines:
                 SetupTwoLines(board);
-                PawnFirstMoveDistance = 2;
                 break;
             case SetupMode.OneLine:
                 SetupOneLine(board);
-                PawnFirstMoveDistance = 2;
                 break;
             case SetupMode.ThreeLines:
                 SetupThreeLines(board);
-                PawnFirstMoveDistance = 3; // Larger pawn moves for dense setup
                 break;
             case SetupMode.Custom:
                 // Board already has pieces from SetupEditor
-                PawnFirstMoveDistance = 2;
                 break;
         }
 
-        // Update pawn move distance
+        // Apply current pawn move distance (controlled via UI)
         Pawn.FirstMoveDistance = PawnFirstMoveDistance;
     }
 
@@ -332,7 +328,7 @@ public static class SetupManager
         {
             SetupMode.TwoLines => "Two ranks of major pieces.\nSlower development, more tactical.",
             SetupMode.OneLine => "Randomized back rank (Chess960-style).\nKing between rooks, bishops on opposite colors.",
-            SetupMode.ThreeLines => "Three ranks of major pieces!\nExtremely dense, chaotic battles.\nPawns can move 3 squares initially.",
+            SetupMode.ThreeLines => "Three ranks of major pieces!\nExtremely dense, chaotic battles.",
             SetupMode.Custom => "Create your own starting position!\nPlace pieces manually on the board.",
             _ => ""
         };

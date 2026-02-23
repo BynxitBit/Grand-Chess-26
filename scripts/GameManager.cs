@@ -18,7 +18,8 @@ public partial class GameManager : Node
     private Board _board;
     private bool _whiteTurn = true;
     private GameState _gameState = GameState.Playing;
-    private Vector2I? _enPassantTarget = null;
+    private List<Vector2I> _enPassantTargets = new();
+    private Vector2I? _enPassantCapturedPawnPos = null;
     private int _moveCount = 0;
     private int _halfMoveClock = 0; // For 50-move rule (extended to 100 for large board)
 
@@ -64,7 +65,8 @@ public partial class GameManager : Node
         _gameState = GameState.Playing;
         _moveCount = 0;
         _halfMoveClock = 0;
-        _enPassantTarget = null;
+        _enPassantTargets = new();
+        _enPassantCapturedPawnPos = null;
     }
 
     public void SetupTwoLines()
@@ -92,15 +94,18 @@ public partial class GameManager : Node
         }
 
         // Add en passant moves for pawns
-        if (piece is Pawn && _enPassantTarget.HasValue)
+        if (piece is Pawn && _enPassantTargets.Count > 0)
         {
             int direction = piece.IsWhite ? 1 : -1;
-            if (Math.Abs(_enPassantTarget.Value.X - square.X) == 1 &&
-                _enPassantTarget.Value.Y == square.Y + direction)
+            foreach (var epTarget in _enPassantTargets)
             {
-                if (IsMoveLegal(square, _enPassantTarget.Value))
+                if (Math.Abs(epTarget.X - square.X) == 1 &&
+                    epTarget.Y == square.Y + direction)
                 {
-                    legalMoves.Add(_enPassantTarget.Value);
+                    if (IsMoveLegal(square, epTarget))
+                    {
+                        legalMoves.Add(epTarget);
+                    }
                 }
             }
         }
@@ -123,11 +128,11 @@ public partial class GameManager : Node
 
         // Handle en passant capture
         Piece enPassantCaptured = null;
-        if (piece is Pawn && _enPassantTarget.HasValue && to == _enPassantTarget.Value)
+        if (piece is Pawn && _enPassantTargets.Contains(to) && _enPassantCapturedPawnPos.HasValue)
         {
-            int capturedPawnRank = piece.IsWhite ? to.Y - 1 : to.Y + 1;
-            enPassantCaptured = boardState[to.X, capturedPawnRank];
-            boardState[to.X, capturedPawnRank] = null;
+            var epPos = _enPassantCapturedPawnPos.Value;
+            enPassantCaptured = boardState[epPos.X, epPos.Y];
+            boardState[epPos.X, epPos.Y] = null;
         }
 
         bool isLegal = !IsKingInCheck(piece.IsWhite, boardState);
@@ -137,10 +142,10 @@ public partial class GameManager : Node
         boardState[to.X, to.Y] = captured;
         piece.Position = originalPos;
 
-        if (enPassantCaptured != null)
+        if (enPassantCaptured != null && _enPassantCapturedPawnPos.HasValue)
         {
-            int capturedPawnRank = piece.IsWhite ? to.Y - 1 : to.Y + 1;
-            boardState[to.X, capturedPawnRank] = enPassantCaptured;
+            var epPos = _enPassantCapturedPawnPos.Value;
+            boardState[epPos.X, epPos.Y] = enPassantCaptured;
         }
 
         // Additional check for castling - king cannot castle through check
@@ -173,11 +178,9 @@ public partial class GameManager : Node
         Piece captured = _board.GetPiece(to);
 
         // Handle en passant capture
-        if (piece is Pawn && _enPassantTarget.HasValue && to == _enPassantTarget.Value)
+        if (piece is Pawn && _enPassantTargets.Contains(to) && _enPassantCapturedPawnPos.HasValue)
         {
-            int capturedPawnRank = piece.IsWhite ? to.Y - 1 : to.Y + 1;
-            _board.SetPiece(new Vector2I(to.X, capturedPawnRank), null);
-            captured = _board.GetPiece(new Vector2I(to.X, capturedPawnRank));
+            _board.SetPiece(_enPassantCapturedPawnPos.Value, null);
         }
 
         // Handle castling
@@ -199,12 +202,18 @@ public partial class GameManager : Node
             _board.MovePiece(new Vector2I(rookFromFile, from.Y), new Vector2I(rookToFile, from.Y));
         }
 
-        // Set en passant target for pawn double moves
-        _enPassantTarget = null;
+        // Set en passant targets for pawn multi-square moves
+        _enPassantTargets = new();
+        _enPassantCapturedPawnPos = null;
         if (piece is Pawn && Math.Abs(to.Y - from.Y) >= 2)
         {
-            int enPassantRank = from.Y + (piece.IsWhite ? 1 : -1);
-            _enPassantTarget = new Vector2I(to.X, enPassantRank);
+            int direction = piece.IsWhite ? 1 : -1;
+            // All intermediate squares are valid en passant capture targets
+            for (int rank = from.Y + direction; rank != to.Y; rank += direction)
+            {
+                _enPassantTargets.Add(new Vector2I(to.X, rank));
+            }
+            _enPassantCapturedPawnPos = to;
         }
 
         // Execute the move
@@ -468,15 +477,18 @@ public partial class GameManager : Node
         }
 
         // Add en passant moves for pawns
-        if (piece is Pawn && _enPassantTarget.HasValue)
+        if (piece is Pawn && _enPassantTargets.Count > 0)
         {
             int direction = piece.IsWhite ? 1 : -1;
-            if (Math.Abs(_enPassantTarget.Value.X - square.X) == 1 &&
-                _enPassantTarget.Value.Y == square.Y + direction)
+            foreach (var epTarget in _enPassantTargets)
             {
-                if (IsMoveLegal(square, _enPassantTarget.Value))
+                if (Math.Abs(epTarget.X - square.X) == 1 &&
+                    epTarget.Y == square.Y + direction)
                 {
-                    legalMoves.Add(_enPassantTarget.Value);
+                    if (IsMoveLegal(square, epTarget))
+                    {
+                        legalMoves.Add(epTarget);
+                    }
                 }
             }
         }
@@ -499,7 +511,8 @@ public partial class GameManager : Node
         _gameState = GameState.Playing;
         _moveCount = 0;
         _halfMoveClock = 0;
-        _enPassantTarget = null;
+        _enPassantTargets = new();
+        _enPassantCapturedPawnPos = null;
         _awaitingPromotion = false;
         _board.ClearHighlights();
     }

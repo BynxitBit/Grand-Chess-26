@@ -294,8 +294,8 @@ public class Pawn : Piece
 {
     public override PieceType Type => PieceType.Pawn;
 
-    // Configurable first move distance (2 or 3 squares)
-    public static int FirstMoveDistance = 2;
+    // Configurable first move distance (up to 4 squares)
+    public static int FirstMoveDistance = 4;
 
     public Pawn(bool isWhite, Vector2I position) : base(isWhite, position) { }
 
