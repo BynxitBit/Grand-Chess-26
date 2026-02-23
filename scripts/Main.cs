@@ -155,6 +155,10 @@ public partial class Main : Node2D
 
         // Create fixed screen UI (flip controls, instructions)
         CreateFixedUI();
+
+        // Sync initial auto-flip state
+        _autoFlipEnabled = _autoFlipCheckbox.ButtonPressed;
+        _flipButton.Visible = !_autoFlipEnabled;
     }
 
     private void CreateWorldSpaceUI()
