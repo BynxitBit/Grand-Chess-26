@@ -418,13 +418,28 @@ public partial class Main : Node2D
         pieceStyleHBox.AddChild(pieceStyleSelector);
         mainVBox.AddChild(pieceStyleHBox);
 
-        // New Game button
+        // New Game / Randomize buttons
+        var gameButtonHBox = new HBoxContainer();
+        gameButtonHBox.AddThemeConstantOverride("separation", 4);
+
         var resetButton = new Button();
         resetButton.Name = "ResetButton";
         resetButton.Text = "New Game";
+        resetButton.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         resetButton.CustomMinimumSize = new Vector2(0, 30);
         resetButton.Pressed += OnResetButtonPressed;
-        mainVBox.AddChild(resetButton);
+        gameButtonHBox.AddChild(resetButton);
+
+        var randomizeButton = new Button();
+        randomizeButton.Name = "RandomizeButton";
+        randomizeButton.Text = "Randomize";
+        randomizeButton.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        randomizeButton.CustomMinimumSize = new Vector2(0, 30);
+        randomizeButton.TooltipText = "Shuffle pieces into random positions and start a new game";
+        randomizeButton.Pressed += OnRandomizeButtonPressed;
+        gameButtonHBox.AddChild(randomizeButton);
+
+        mainVBox.AddChild(gameButtonHBox);
 
         mainVBox.AddChild(CreateSeparator());
 
@@ -1548,7 +1563,7 @@ public partial class Main : Node2D
         ClearMoveHistory();
     }
 
-    private void StartNewGame(SetupMode mode)
+    private void StartNewGame(SetupMode mode, bool randomize = false)
     {
         _aiIsThinking = false;
         _promotionPanel.Visible = false;
@@ -1587,7 +1602,7 @@ public partial class Main : Node2D
         SetupManager.PawnFirstMoveDistance = (int)_firstMoveDistanceInput.Value;
         UpdateFirstMoveDistanceMax();
 
-        _gameManager.SetupGame(mode);
+        _gameManager.SetupGame(mode, randomize);
         DeselectPiece();
         UpdateStatusLabel();
         UpdateModeDescription();
@@ -1615,6 +1630,17 @@ public partial class Main : Node2D
 
         // Use StartNewGame to apply board size from input
         StartNewGame(_gameManager.CurrentSetupMode);
+    }
+
+    private void OnRandomizeButtonPressed()
+    {
+        if (_isInSetupMode || _aiIsThinking)
+            return;
+
+        if (_gameType == GameType.Multiplayer && _networkManager.IsOnline)
+            return;
+
+        StartNewGame(_gameManager.CurrentSetupMode, randomize: true);
     }
 
     // === Multiplayer Methods ===

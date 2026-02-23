@@ -16,7 +16,7 @@ public static class SetupManager
     public static int TotalLines { get; set; } = 3;
     public static int PawnLines { get; set; } = 1;
 
-    public static void SetupBoard(Board board, SetupMode mode)
+    public static void SetupBoard(Board board, SetupMode mode, bool randomize = false)
     {
         // Custom mode doesn't reset the board - it uses whatever was placed
         if (mode != SetupMode.Custom)
@@ -27,7 +27,10 @@ public static class SetupManager
         switch (mode)
         {
             case SetupMode.Lines:
-                SetupLines(board, TotalLines, PawnLines);
+                if (randomize)
+                    SetupLinesRandomized(board, TotalLines, PawnLines);
+                else
+                    SetupLines(board, TotalLines, PawnLines);
                 break;
             case SetupMode.Custom:
                 // Board already has pieces from SetupEditor
@@ -117,6 +120,75 @@ public static class SetupManager
             2 => new int[] { 4, 1, 2, 3 },              // R, Q, B, N
             _ => new int[] { 1, 2, 3, 4 }
         };
+    }
+
+    private static void SetupLinesRandomized(Board board, int totalLines, int pawnLines)
+    {
+        var rng = new Random();
+        SetupLinesSideRandomized(board, true, totalLines, pawnLines, rng);
+        SetupLinesSideRandomized(board, false, totalLines, pawnLines, rng);
+    }
+
+    private static void SetupLinesSideRandomized(Board board, bool isWhite, int totalLines, int pawnLines, Random rng)
+    {
+        int majorLines = totalLines - pawnLines;
+        int center = Board.BoardSize / 2;
+
+        for (int lineIdx = 0; lineIdx < majorLines; lineIdx++)
+        {
+            int rank = isWhite ? lineIdx : Board.BoardSize - 1 - lineIdx;
+            var pieces = new List<Piece>();
+
+            if (lineIdx == 0)
+            {
+                pieces.Add(new King(isWhite, Vector2I.Zero));
+                int[] pattern = { 1, 2, 3, 4 };
+                for (int offset = 1; offset <= center + 1; offset++)
+                {
+                    int leftFile = center - offset;
+                    int rightFile = center + offset;
+                    int patternIdx = (offset - 1) % 4;
+                    if (leftFile >= 0)
+                        pieces.Add(CreatePieceByPattern(pattern[patternIdx], isWhite, Vector2I.Zero));
+                    if (rightFile < Board.BoardSize)
+                        pieces.Add(CreatePieceByPattern(pattern[patternIdx], isWhite, Vector2I.Zero));
+                }
+            }
+            else
+            {
+                int[] pattern = GetMajorLinePattern(lineIdx);
+                for (int file = 0; file < Board.BoardSize; file++)
+                    pieces.Add(CreatePieceByPattern(pattern[file % pattern.Length], isWhite, Vector2I.Zero));
+            }
+
+            // Fisher-Yates shuffle
+            for (int i = pieces.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (pieces[i], pieces[j]) = (pieces[j], pieces[i]);
+            }
+
+            // Place shuffled pieces with correct positions
+            for (int file = 0; file < Board.BoardSize && file < pieces.Count; file++)
+            {
+                var pos = new Vector2I(file, rank);
+                pieces[file].Position = pos;
+                board.SetPiece(pos, pieces[file]);
+            }
+        }
+
+        // Pawn lines unchanged
+        for (int pawnLineIdx = 0; pawnLineIdx < pawnLines; pawnLineIdx++)
+        {
+            int rank = isWhite
+                ? majorLines + pawnLineIdx
+                : Board.BoardSize - 1 - majorLines - pawnLineIdx;
+            for (int file = 0; file < Board.BoardSize; file++)
+            {
+                var pos = new Vector2I(file, rank);
+                board.SetPiece(pos, new Pawn(isWhite, pos));
+            }
+        }
     }
 
     #endregion

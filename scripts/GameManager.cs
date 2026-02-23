@@ -56,10 +56,10 @@ public partial class GameManager : Node
         _board = board;
     }
 
-    public void SetupGame(SetupMode mode)
+    public void SetupGame(SetupMode mode, bool randomize = false)
     {
         CurrentSetupMode = mode;
-        SetupManager.SetupBoard(_board, mode);
+        SetupManager.SetupBoard(_board, mode, randomize);
 
         _whiteTurn = true;
         _gameState = GameState.Playing;
