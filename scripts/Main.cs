@@ -52,6 +52,11 @@ public partial class Main : Node2D
     // Board size UI
     private SpinBox _boardSizeInput;
 
+    // Lines configuration UI
+    private SpinBox _totalLinesInput;
+    private SpinBox _pawnLinesInput;
+    private Control _linesContainer;
+
     // First move distance UI
     private SpinBox _firstMoveDistanceInput;
 
@@ -140,7 +145,7 @@ public partial class Main : Node2D
         _gameManager.PawnPromotionRequested += OnPawnPromotionRequested;
 
         // Setup initial game
-        _gameManager.SetupGame(SetupMode.TwoLines);
+        _gameManager.SetupGame(SetupMode.Lines);
         UpdateStatusLabel();
         UpdateModeDescription();
         ClearMoveHistory();
@@ -274,16 +279,57 @@ public partial class Main : Node2D
         _modeSelector = new OptionButton();
         _modeSelector.Name = "ModeSelector";
         _modeSelector.CustomMinimumSize = new Vector2(140, 0);
-
-        foreach (SetupMode mode in Enum.GetValues(typeof(SetupMode)))
-        {
-            _modeSelector.AddItem(SetupManager.GetModeName(mode), (int)mode);
-        }
-
+        _modeSelector.AddItem(SetupManager.GetModeName(SetupMode.Lines), (int)SetupMode.Lines);
+        _modeSelector.AddItem(SetupManager.GetModeName(SetupMode.Custom), (int)SetupMode.Custom);
         _modeSelector.Selected = 0;
         _modeSelector.ItemSelected += OnModeSelected;
         modeHBox.AddChild(_modeSelector);
         mainVBox.AddChild(modeHBox);
+
+        // Lines configuration container (hidden when Custom mode is selected)
+        _linesContainer = new VBoxContainer();
+        ((VBoxContainer)_linesContainer).AddThemeConstantOverride("separation", 4);
+        mainVBox.AddChild(_linesContainer);
+
+        // Total lines SpinBox
+        var totalLinesHBox = new HBoxContainer();
+        var totalLinesLabel = new Label();
+        totalLinesLabel.Text = "Lines:";
+        totalLinesLabel.AddThemeColorOverride("font_color", new Color("#cccccc"));
+        totalLinesLabel.AddThemeFontSizeOverride("font_size", 12);
+        totalLinesLabel.CustomMinimumSize = new Vector2(75, 0);
+        totalLinesHBox.AddChild(totalLinesLabel);
+
+        _totalLinesInput = new SpinBox();
+        _totalLinesInput.MinValue = 1;
+        _totalLinesInput.MaxValue = Board.BoardSize / 2;
+        _totalLinesInput.Value = SetupManager.TotalLines;
+        _totalLinesInput.Step = 1;
+        _totalLinesInput.CustomMinimumSize = new Vector2(80, 0);
+        _totalLinesInput.TooltipText = "Total rows per side (major pieces + pawns). Applies on New Game.";
+        _totalLinesInput.ValueChanged += OnTotalLinesChanged;
+        totalLinesHBox.AddChild(_totalLinesInput);
+        _linesContainer.AddChild(totalLinesHBox);
+
+        // Pawn lines SpinBox
+        var pawnLinesHBox = new HBoxContainer();
+        var pawnLinesLabel = new Label();
+        pawnLinesLabel.Text = "Pawn lines:";
+        pawnLinesLabel.AddThemeColorOverride("font_color", new Color("#cccccc"));
+        pawnLinesLabel.AddThemeFontSizeOverride("font_size", 12);
+        pawnLinesLabel.CustomMinimumSize = new Vector2(75, 0);
+        pawnLinesHBox.AddChild(pawnLinesLabel);
+
+        _pawnLinesInput = new SpinBox();
+        _pawnLinesInput.MinValue = 0;
+        _pawnLinesInput.MaxValue = Math.Max(0, (int)_totalLinesInput.Value - 1);
+        _pawnLinesInput.Value = SetupManager.PawnLines;
+        _pawnLinesInput.Step = 1;
+        _pawnLinesInput.CustomMinimumSize = new Vector2(80, 0);
+        _pawnLinesInput.TooltipText = "Pawn rows per side (≤ Lines - 1). Applies on New Game.";
+        _pawnLinesInput.ValueChanged += OnPawnLinesChanged;
+        pawnLinesHBox.AddChild(_pawnLinesInput);
+        _linesContainer.AddChild(pawnLinesHBox);
 
         // Mode description
         _modeDescLabel = new Label();
@@ -291,7 +337,7 @@ public partial class Main : Node2D
         _modeDescLabel.AddThemeColorOverride("font_color", new Color("#888888"));
         _modeDescLabel.AddThemeFontSizeOverride("font_size", 10);
         _modeDescLabel.AutowrapMode = TextServer.AutowrapMode.Word;
-        _modeDescLabel.CustomMinimumSize = new Vector2(260, 35);
+        _modeDescLabel.CustomMinimumSize = new Vector2(260, 25);
         mainVBox.AddChild(_modeDescLabel);
 
         // Board size input
@@ -334,7 +380,7 @@ public partial class Main : Node2D
 
         _firstMoveDistanceInput = new SpinBox();
         _firstMoveDistanceInput.MinValue = 1;
-        _firstMoveDistanceInput.MaxValue = GetMaxFirstMoveDistance(SetupMode.TwoLines);
+        _firstMoveDistanceInput.MaxValue = Board.BoardSize - SetupManager.TotalLines;
         _firstMoveDistanceInput.Value = Pawn.FirstMoveDistance;
         _firstMoveDistanceInput.Step = 1;
         _firstMoveDistanceInput.CustomMinimumSize = new Vector2(80, 0);
@@ -464,7 +510,7 @@ public partial class Main : Node2D
 
         // Keyboard shortcuts
         var shortcutsLabel = new Label();
-        shortcutsLabel.Text = "Scroll: Zoom | Middle-drag: Pan\nR: Reset | F: Flip | 1-4: Modes";
+        shortcutsLabel.Text = "Scroll: Zoom | Middle-drag: Pan\nR: Reset | F: Flip | 1: Lines | 2: Custom";
         shortcutsLabel.AddThemeColorOverride("font_color", new Color("#666666"));
         shortcutsLabel.AddThemeFontSizeOverride("font_size", 10);
         mainVBox.AddChild(shortcutsLabel);
@@ -763,7 +809,7 @@ public partial class Main : Node2D
                     DeselectPiece();
                 }
             }
-            else if (keyEvent.Keycode >= Key.Key1 && keyEvent.Keycode <= Key.Key4)
+            else if (keyEvent.Keycode == Key.Key1 || keyEvent.Keycode == Key.Key2)
             {
                 // In multiplayer, only host can change modes
                 if (_gameType == GameType.Multiplayer && _networkManager.IsOnline && !_networkManager.IsHost)
@@ -773,17 +819,9 @@ public partial class Main : Node2D
 
                 if (keyEvent.Keycode == Key.Key1)
                 {
-                    SelectMode(SetupMode.TwoLines);
+                    SelectMode(SetupMode.Lines);
                 }
                 else if (keyEvent.Keycode == Key.Key2)
-                {
-                    SelectMode(SetupMode.OneLine);
-                }
-                else if (keyEvent.Keycode == Key.Key3)
-                {
-                    SelectMode(SetupMode.ThreeLines);
-                }
-                else if (keyEvent.Keycode == Key.Key4)
                 {
                     SelectMode(SetupMode.Custom);
                 }
@@ -1183,27 +1221,39 @@ public partial class Main : Node2D
         _fenStatusLabel.AddThemeColorOverride("font_color", new Color("#88ff88"));
     }
 
-    private int GetMaxFirstMoveDistance(SetupMode mode)
+    private int GetMaxFirstMoveDistance()
     {
-        // Pawn start rank (white side, 0-indexed): OneLine=1, TwoLines=2, ThreeLines=3, Custom=1
-        int pawnStartRank = mode switch
-        {
-            SetupMode.OneLine => 1,
-            SetupMode.TwoLines => 2,
-            SetupMode.ThreeLines => 3,
-            _ => 1
-        };
-        return Math.Max(1, Board.BoardSize - 1 - pawnStartRank);
+        // For custom mode, be generous (pawns could be anywhere)
+        if (_gameManager.CurrentSetupMode == SetupMode.Custom)
+            return Math.Max(1, Board.BoardSize - 1);
+
+        // Frontmost pawn starts at rank (totalLines - 1); max distance to promotion rank
+        int totalLines = _totalLinesInput != null ? (int)_totalLinesInput.Value : SetupManager.TotalLines;
+        return Math.Max(1, Board.BoardSize - totalLines);
     }
 
-    private void UpdateFirstMoveDistanceMax(SetupMode mode)
+    private void UpdateFirstMoveDistanceMax()
     {
-        int newMax = GetMaxFirstMoveDistance(mode);
+        int newMax = GetMaxFirstMoveDistance();
         _firstMoveDistanceInput.MaxValue = newMax;
         if (_firstMoveDistanceInput.Value > newMax)
-        {
             _firstMoveDistanceInput.Value = newMax;
-        }
+    }
+
+    private void OnTotalLinesChanged(double value)
+    {
+        int total = (int)value;
+        // Keep pawn lines ≤ total - 1
+        _pawnLinesInput.MaxValue = Math.Max(0, total - 1);
+        if (_pawnLinesInput.Value > _pawnLinesInput.MaxValue)
+            _pawnLinesInput.Value = _pawnLinesInput.MaxValue;
+        UpdateFirstMoveDistanceMax();
+        UpdateModeDescription();
+    }
+
+    private void OnPawnLinesChanged(double value)
+    {
+        UpdateModeDescription();
     }
 
     private void OnFirstMoveDistanceChanged(double value)
@@ -1332,7 +1382,25 @@ public partial class Main : Node2D
     private void UpdateModeDescription()
     {
         SetupMode currentMode = _isInSetupMode ? SetupMode.Custom : _gameManager.CurrentSetupMode;
-        _modeDescLabel.Text = SetupManager.GetModeDescription(currentMode);
+
+        // Show/hide the lines configuration spinboxes
+        if (_linesContainer != null)
+            _linesContainer.Visible = (currentMode == SetupMode.Lines);
+
+        // Build description using live spinbox values (not yet-committed game state)
+        if (currentMode == SetupMode.Lines && _totalLinesInput != null && _pawnLinesInput != null)
+        {
+            int total = (int)_totalLinesInput.Value;
+            int pawn = (int)_pawnLinesInput.Value;
+            int major = total - pawn;
+            string majorPart = major == 1 ? "1 major piece line" : $"{major} major piece lines";
+            string pawnPart = pawn == 0 ? "no pawn lines" : pawn == 1 ? "1 pawn line" : $"{pawn} pawn lines";
+            _modeDescLabel.Text = $"{majorPart} + {pawnPart}.";
+        }
+        else
+        {
+            _modeDescLabel.Text = SetupManager.GetModeDescription(currentMode);
+        }
     }
 
     private void OnGameTypeSelected(long index)
@@ -1408,7 +1476,7 @@ public partial class Main : Node2D
 
         if (mode == SetupMode.Custom)
         {
-            UpdateFirstMoveDistanceMax(mode);
+            UpdateFirstMoveDistanceMax();
             EnterSetupMode();
         }
         else
@@ -1435,7 +1503,7 @@ public partial class Main : Node2D
 
         if (mode == SetupMode.Custom)
         {
-            UpdateFirstMoveDistanceMax(mode);
+            UpdateFirstMoveDistanceMax();
             EnterSetupMode();
         }
         else
@@ -1510,9 +1578,14 @@ public partial class Main : Node2D
             _gamePanel.Position = new Vector2(boardPixelSize + 20, 10);
         }
 
-        // Update first move distance max for new board size / mode, then apply
-        UpdateFirstMoveDistanceMax(mode);
+        // Clamp total lines to new board size first, then sync to SetupManager
+        _totalLinesInput.MaxValue = Board.BoardSize / 2;
+        if (_totalLinesInput.Value > _totalLinesInput.MaxValue)
+            _totalLinesInput.Value = _totalLinesInput.MaxValue;
+        SetupManager.TotalLines = (int)_totalLinesInput.Value;
+        SetupManager.PawnLines = (int)_pawnLinesInput.Value;
         SetupManager.PawnFirstMoveDistance = (int)_firstMoveDistanceInput.Value;
+        UpdateFirstMoveDistanceMax();
 
         _gameManager.SetupGame(mode);
         DeselectPiece();

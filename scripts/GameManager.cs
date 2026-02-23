@@ -49,7 +49,7 @@ public partial class GameManager : Node
 
     public bool IsAwaitingPromotion => _awaitingPromotion;
     public GameState CurrentState => _gameState;
-    public SetupMode CurrentSetupMode { get; set; } = SetupMode.TwoLines;
+    public SetupMode CurrentSetupMode { get; set; } = SetupMode.Lines;
 
     public void Initialize(Board board)
     {
@@ -67,11 +67,6 @@ public partial class GameManager : Node
         _halfMoveClock = 0;
         _enPassantTargets = new();
         _enPassantCapturedPawnPos = null;
-    }
-
-    public void SetupTwoLines()
-    {
-        SetupGame(SetupMode.TwoLines);
     }
 
     public List<Vector2I> GetLegalMoves(Vector2I square)

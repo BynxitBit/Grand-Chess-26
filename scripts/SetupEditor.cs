@@ -170,7 +170,7 @@ public partial class SetupEditor : Control
         var standardPreset = new Button();
         standardPreset.Text = "Standard";
         standardPreset.CustomMinimumSize = new Vector2(85, 25);
-        standardPreset.Pressed += () => LoadPreset(SetupMode.TwoLines);
+        standardPreset.Pressed += () => LoadPreset(SetupMode.Lines);
         presetContainer.AddChild(standardPreset);
 
         var minimalPreset = new Button();
