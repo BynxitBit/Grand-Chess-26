@@ -14,6 +14,18 @@ A chess variant with variable board sizes (3x3 to 99x99) and multiple setup mode
 - **FEN import/export** for sharing positions
 - **Pawn promotion** to Queen, Rook, Bishop, or Knight
 
+## Online Multiplayer
+
+Play against a friend over the internet using session codes (no IP sharing or servers needed).
+
+1. **Host** clicks "Create Game" and waits for a session code to be generated
+2. **Host** copies the session code and sends it to the other player (via Discord, chat, etc.)
+3. **Joiner** clicks "Join Game", pastes the host's code, and clicks "Join"
+4. **Joiner** copies their response code and sends it back to the host
+5. **Host** pastes the response code and clicks "Connect" - the game begins!
+
+The host plays as White and the joiner plays as Black.
+
 ## Controls
 
 - **Left-click:** Select/move pieces
@@ -33,7 +45,7 @@ A chess variant with variable board sizes (3x3 to 99x99) and multiple setup mode
    - **Linux:** Run `GrandChess26.x86_64` (you may need to mark it executable with `chmod +x`)
    - **macOS:** Run `GrandChess26.app`
 
-### Assets: Chess pieces by [RhosGFX](https://rhosgfx.itch.io/vector-chess-pieces).
+### Credits: Chess pieces by [RhosGFX](https://rhosgfx.itch.io/vector-chess-pieces)
 
 ## Development
 
