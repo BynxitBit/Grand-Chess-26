@@ -1,4 +1,4 @@
-# Grand Chess
+# Grand Chess 26
 
 A chess variant with variable board sizes (3x3 to 99x99) and multiple setup modes
 
@@ -6,10 +6,9 @@ A chess variant with variable board sizes (3x3 to 99x99) and multiple setup mode
 
 - **Variable board size** (3-99 squares)
 - **Multiple setup modes:**
-  - Two Lines - Two ranks of pieces behind pawns (default)
-  - One Line - Chess960-style randomized back rank
-  - Three Lines - Dense setup with 3 ranks of pieces
+  - Standard - Dynamically configure how many piece ranks to place and how many of those are pawn ranks
   - Custom - Place pieces manually with mirroring support
+- **Configurable pawn first move** - Set how many squares a pawn can advance on its first move
 - **Game modes:** Player vs Player, Player vs AI, Online Multiplayer
 - **FEN import/export** for sharing positions
 - **Pawn promotion** to Queen, Rook, Bishop, or Knight
@@ -33,7 +32,7 @@ The host plays as White and the joiner plays as Black.
 - **Scroll:** Zoom in/out
 - **R:** New game
 - **F:** Flip board
-- **1-4:** Quick select setup mode
+- **1-2:** Quick select setup mode
 - **Escape:** Deselect/cancel
 
 ## Download & Install
