@@ -11,7 +11,12 @@ public enum PieceType
     Rook,
     Bishop,
     Knight,
-    Pawn
+    Pawn,
+    Archbishop,  // Bishop + Knight
+    Chancellor,  // Rook + Knight
+    Nightrider,  // Extends knight jumps in a line
+    Cannon,      // Rook move, captures by jumping over 1 piece
+    Camel        // (3,1) leaper
 }
 
 public abstract class Piece
@@ -91,6 +96,11 @@ public abstract class Piece
             PieceType.Bishop => new Bishop(IsWhite, Position),
             PieceType.Knight => new Knight(IsWhite, Position),
             PieceType.Pawn => new Pawn(IsWhite, Position),
+            PieceType.Archbishop => new Archbishop(IsWhite, Position),
+            PieceType.Chancellor => new Chancellor(IsWhite, Position),
+            PieceType.Nightrider => new Nightrider(IsWhite, Position),
+            PieceType.Cannon => new Cannon(IsWhite, Position),
+            PieceType.Camel => new Camel(IsWhite, Position),
             _ => throw new InvalidOperationException()
         };
         clone.HasMoved = HasMoved;
@@ -363,5 +373,204 @@ public class Pawn : Piece
     {
         int promotionRank = IsWhite ? Board.BoardSize - 1 : 0;
         return Position.Y == promotionRank;
+    }
+}
+
+public class Archbishop : Piece
+{
+    public override PieceType Type => PieceType.Archbishop;
+
+    public Archbishop(bool isWhite, Vector2I position) : base(isWhite, position) { }
+
+    public override string GetUnicodeSymbol() => IsWhite ? "A" : "a";
+
+    public override List<Vector2I> GetPossibleMoves(Piece[,] board)
+    {
+        var moves = new List<Vector2I>();
+
+        // Bishop moves (diagonal sliding)
+        int[] dirX = { -1, -1, 1, 1 };
+        int[] dirY = { -1, 1, -1, 1 };
+        moves.AddRange(GetSlidingMoves(board, dirX, dirY));
+
+        // Knight jumps
+        int[] dx = { -2, -2, -1, -1, 1, 1, 2, 2 };
+        int[] dy = { -1, 1, -2, 2, -2, 2, -1, 1 };
+        for (int i = 0; i < 8; i++)
+        {
+            int file = Position.X + dx[i];
+            int rank = Position.Y + dy[i];
+            if (IsValidSquare(file, rank))
+            {
+                Piece target = board[file, rank];
+                if (target == null || IsEnemyPiece(target))
+                    moves.Add(new Vector2I(file, rank));
+            }
+        }
+
+        return moves;
+    }
+}
+
+public class Chancellor : Piece
+{
+    public override PieceType Type => PieceType.Chancellor;
+
+    public Chancellor(bool isWhite, Vector2I position) : base(isWhite, position) { }
+
+    public override string GetUnicodeSymbol() => IsWhite ? "C" : "c";
+
+    public override List<Vector2I> GetPossibleMoves(Piece[,] board)
+    {
+        var moves = new List<Vector2I>();
+
+        // Rook moves (orthogonal sliding)
+        int[] dirX = { -1, 0, 1, 0 };
+        int[] dirY = { 0, -1, 0, 1 };
+        moves.AddRange(GetSlidingMoves(board, dirX, dirY));
+
+        // Knight jumps
+        int[] dx = { -2, -2, -1, -1, 1, 1, 2, 2 };
+        int[] dy = { -1, 1, -2, 2, -2, 2, -1, 1 };
+        for (int i = 0; i < 8; i++)
+        {
+            int file = Position.X + dx[i];
+            int rank = Position.Y + dy[i];
+            if (IsValidSquare(file, rank))
+            {
+                Piece target = board[file, rank];
+                if (target == null || IsEnemyPiece(target))
+                    moves.Add(new Vector2I(file, rank));
+            }
+        }
+
+        return moves;
+    }
+}
+
+public class Nightrider : Piece
+{
+    public override PieceType Type => PieceType.Nightrider;
+
+    public Nightrider(bool isWhite, Vector2I position) : base(isWhite, position) { }
+
+    public override string GetUnicodeSymbol() => IsWhite ? "NR" : "nr";
+
+    public override List<Vector2I> GetPossibleMoves(Piece[,] board)
+    {
+        var moves = new List<Vector2I>();
+        int[] dx = { -2, -2, -1, -1, 1, 1, 2, 2 };
+        int[] dy = { -1, 1, -2, 2, -2, 2, -1, 1 };
+
+        for (int dir = 0; dir < 8; dir++)
+        {
+            int file = Position.X + dx[dir];
+            int rank = Position.Y + dy[dir];
+
+            while (IsValidSquare(file, rank))
+            {
+                Piece target = board[file, rank];
+                if (target == null)
+                {
+                    moves.Add(new Vector2I(file, rank));
+                }
+                else if (IsEnemyPiece(target))
+                {
+                    moves.Add(new Vector2I(file, rank));
+                    break;
+                }
+                else
+                {
+                    break;
+                }
+                file += dx[dir];
+                rank += dy[dir];
+            }
+        }
+
+        return moves;
+    }
+}
+
+public class Cannon : Piece
+{
+    public override PieceType Type => PieceType.Cannon;
+
+    public Cannon(bool isWhite, Vector2I position) : base(isWhite, position) { }
+
+    public override string GetUnicodeSymbol() => IsWhite ? "Cn" : "cn";
+
+    public override List<Vector2I> GetPossibleMoves(Piece[,] board)
+    {
+        var moves = new List<Vector2I>();
+        int[] dirX = { -1, 0, 1, 0 };
+        int[] dirY = { 0, -1, 0, 1 };
+
+        for (int d = 0; d < 4; d++)
+        {
+            int file = Position.X + dirX[d];
+            int rank = Position.Y + dirY[d];
+            bool foundPlatform = false;
+
+            while (IsValidSquare(file, rank))
+            {
+                Piece target = board[file, rank];
+                if (!foundPlatform)
+                {
+                    if (target == null)
+                    {
+                        moves.Add(new Vector2I(file, rank));
+                    }
+                    else
+                    {
+                        foundPlatform = true; // This piece is the screen/platform
+                    }
+                }
+                else
+                {
+                    if (target != null)
+                    {
+                        if (IsEnemyPiece(target))
+                            moves.Add(new Vector2I(file, rank));
+                        break; // Stop after first piece beyond platform
+                    }
+                }
+
+                file += dirX[d];
+                rank += dirY[d];
+            }
+        }
+
+        return moves;
+    }
+}
+
+public class Camel : Piece
+{
+    public override PieceType Type => PieceType.Camel;
+
+    public Camel(bool isWhite, Vector2I position) : base(isWhite, position) { }
+
+    public override string GetUnicodeSymbol() => IsWhite ? "Cm" : "cm";
+
+    public override List<Vector2I> GetPossibleMoves(Piece[,] board)
+    {
+        var moves = new List<Vector2I>();
+        int[] dx = { -3, -3, -1, -1, 1, 1, 3, 3 };
+        int[] dy = { -1, 1, -3, 3, -3, 3, -1, 1 };
+
+        for (int i = 0; i < 8; i++)
+        {
+            int file = Position.X + dx[i];
+            int rank = Position.Y + dy[i];
+            if (IsValidSquare(file, rank))
+            {
+                Piece target = board[file, rank];
+                if (target == null || IsEnemyPiece(target))
+                    moves.Add(new Vector2I(file, rank));
+            }
+        }
+
+        return moves;
     }
 }

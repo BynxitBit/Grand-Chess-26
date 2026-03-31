@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+<rect width="72" height="72" fill="#1a1a1a" opacity="0"/>
+<rect x="9" y="56" width="54" height="10" rx="5" fill="#1a1a1a"/>
+<rect x="26" y="39" width="20" height="18" rx="3" fill="#1a1a1a"/>
+<path d="M36,40 C36,32 28,23 20,18 C15,15 11,17 11,22 C11,27 15,29 19,31 C23,33 27,37 27,40Z" fill="#1a1a1a"/>
+<path d="M36,40 C36,32 44,23 52,18 C57,15 61,17 61,22 C61,27 57,29 53,31 C49,33 45,37 45,40Z" fill="#1a1a1a"/>
+<rect x="11" y="58" width="50" height="6" rx="3" fill="#ffdfb5"/>
+<rect x="28" y="41" width="16" height="14" rx="2" fill="#ffdfb5"/>
+<path d="M35,40 C35,33 27,24 20,19 C16,17 12,19 12,23 C12,27 16,29 20,31 C24,33 28,37 28,40Z" fill="#ffdfb5"/>
+<path d="M37,40 C37,33 45,24 52,19 C56,17 60,19 60,23 C60,27 56,29 52,31 C48,33 44,37 44,40Z" fill="#ffdfb5"/>
+<rect x="13" y="60" width="28" height="2.5" rx="1.2" fill="#fff2d4"/>
+<circle cx="13" cy="21" r="2.5" fill="#1a1a1a"/>
+<circle cx="13" cy="21" r="1.2" fill="#fff2d4"/>
+<circle cx="59" cy="21" r="2.5" fill="#1a1a1a"/>
+<circle cx="59" cy="21" r="1.2" fill="#fff2d4"/>
+</svg>

@@ -10,6 +10,7 @@ A chess variant with variable board sizes (3x3 to 99x99) and multiple setup mode
   - Custom - Place pieces manually with mirroring support
 - **Configurable pawn first move** - Set how many squares a pawn can advance on its first move
 - **Game modes:** Player vs Player, Player vs AI, Online Multiplayer
+- **Fairy chess pieces** - Archbishop (Bishop + Knight), Chancellor (Rook + Knight), Nightrider (Knight that slides), Cannon (captures by jumping), and Camel (3,1 leaper)
 - **FEN import/export** for sharing positions
 - **Pawn promotion** to Queen, Rook, Bishop, or Knight
 

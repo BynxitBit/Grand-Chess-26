@@ -533,6 +533,8 @@ public partial class GameManager : Node
             PieceType.Rook => new Rook(_promotingPawn.IsWhite, _promotionSquare),
             PieceType.Bishop => new Bishop(_promotingPawn.IsWhite, _promotionSquare),
             PieceType.Knight => new Knight(_promotingPawn.IsWhite, _promotionSquare),
+            PieceType.Archbishop => new Archbishop(_promotingPawn.IsWhite, _promotionSquare),
+            PieceType.Chancellor => new Chancellor(_promotingPawn.IsWhite, _promotionSquare),
             _ => new Queen(_promotingPawn.IsWhite, _promotionSquare)
         };
 
@@ -576,6 +578,8 @@ public partial class GameManager : Node
             PieceType.Rook => "R",
             PieceType.Bishop => "B",
             PieceType.Knight => "N",
+            PieceType.Archbishop => "A",
+            PieceType.Chancellor => "C",
             _ => "Q"
         };
 

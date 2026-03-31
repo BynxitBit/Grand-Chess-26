@@ -29,6 +29,7 @@ public partial class Main : Node2D
     private Control _gamePanel;  // World-space panel
     private Button _flipButton;
     private CheckBox _autoFlipCheckbox;
+    private CheckBox _fairyPiecesCheckbox;
     private Control _promotionPanel;
     private Vector2I _promotionSquare;
 
@@ -418,6 +419,16 @@ public partial class Main : Node2D
         pieceStyleHBox.AddChild(pieceStyleSelector);
         mainVBox.AddChild(pieceStyleHBox);
 
+        // Fairy pieces checkbox
+        _fairyPiecesCheckbox = new CheckBox();
+        _fairyPiecesCheckbox.Text = "Include fairy pieces";
+        _fairyPiecesCheckbox.ButtonPressed = SetupManager.IncludeFairyPieces;
+        _fairyPiecesCheckbox.AddThemeColorOverride("font_color", new Color("#cccccc"));
+        _fairyPiecesCheckbox.AddThemeFontSizeOverride("font_size", 12);
+        _fairyPiecesCheckbox.TooltipText = "Add Archbishop, Chancellor, Nightrider, Cannon, and Camel to generated boards";
+        _fairyPiecesCheckbox.Toggled += (pressed) => SetupManager.IncludeFairyPieces = pressed;
+        mainVBox.AddChild(_fairyPiecesCheckbox);
+
         // New Game / Randomize buttons
         var gameButtonHBox = new HBoxContainer();
         gameButtonHBox.AddThemeConstantOverride("separation", 4);
@@ -600,7 +611,9 @@ public partial class Main : Node2D
             (PieceType.Queen, "\u2655", "\u265B"),
             (PieceType.Rook, "\u2656", "\u265C"),
             (PieceType.Bishop, "\u2657", "\u265D"),
-            (PieceType.Knight, "\u2658", "\u265E")
+            (PieceType.Knight, "\u2658", "\u265E"),
+            (PieceType.Archbishop, "A", "a"),
+            (PieceType.Chancellor, "C", "c")
         };
 
         foreach (var (pieceType, whiteSymbol, blackSymbol) in pieces)
@@ -755,7 +768,7 @@ public partial class Main : Node2D
             {
                 if (mouseButton.Pressed)
                 {
-                    if (_isInSetupMode)
+                    if (_isInSetupMode && GetViewport().GuiGetHoveredControl() == null)
                     {
                         // Right-click removes pieces in setup mode
                         Vector2I? square = ScreenToBoard(mouseButton.Position);
@@ -785,7 +798,8 @@ public partial class Main : Node2D
             }
             else if (mouseButton.ButtonIndex == MouseButton.Left && mouseButton.Pressed)
             {
-                HandleLeftClick(mouseButton.Position);
+                if (GetViewport().GuiGetHoveredControl() == null)
+                    HandleLeftClick(mouseButton.Position);
             }
         }
 

@@ -192,6 +192,11 @@ public static class FENManager
             PieceType.Bishop => 'b',
             PieceType.Knight => 'n',
             PieceType.Pawn => 'p',
+            PieceType.Archbishop => 'a',
+            PieceType.Chancellor => 'c',
+            PieceType.Nightrider => 'y',
+            PieceType.Cannon => 'o',
+            PieceType.Camel => 'm',
             _ => '?'
         };
 
@@ -211,6 +216,11 @@ public static class FENManager
             'b' => new Bishop(isWhite, position),
             'n' => new Knight(isWhite, position),
             'p' => new Pawn(isWhite, position),
+            'a' => new Archbishop(isWhite, position),
+            'c' => new Chancellor(isWhite, position),
+            'y' => new Nightrider(isWhite, position),
+            'o' => new Cannon(isWhite, position),
+            'm' => new Camel(isWhite, position),
             _ => null
         };
     }

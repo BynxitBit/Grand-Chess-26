@@ -15,6 +15,7 @@ public static class SetupManager
     public static int PawnFirstMoveDistance { get; set; } = 4;
     public static int TotalLines { get; set; } = 3;
     public static int PawnLines { get; set; } = 1;
+    public static bool IncludeFairyPieces { get; set; } = false;
 
     public static void SetupBoard(Board board, SetupMode mode, bool randomize = false)
     {
@@ -64,7 +65,9 @@ public static class SetupManager
                 // Back rank: King centered, symmetric pattern radiating outward
                 board.SetPiece(new Vector2I(center, rank), new King(isWhite, new Vector2I(center, rank)));
 
-                int[] pattern = { 1, 2, 3, 4 }; // Q, B, N, R
+                int[] pattern = IncludeFairyPieces
+                    ? new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }  // Q, B, N, R, Archbishop, Chancellor, Nightrider, Cannon, Camel
+                    : new int[] { 1, 2, 3, 4 };                  // Q, B, N, R
                 for (int offset = 1; offset <= center + 1; offset++)
                 {
                     int leftFile = center - offset;
@@ -113,6 +116,18 @@ public static class SetupManager
     // Pattern for major piece lines beyond the King row (lineIdx >= 1)
     private static int[] GetMajorLinePattern(int lineIdx)
     {
+        if (IncludeFairyPieces)
+        {
+            return ((lineIdx - 1) % 5) switch
+            {
+                0 => new int[] { 2, 3, 4, 1, 5, 6, 7, 8, 9 }, // B, N, R, Q, Archbishop, Chancellor, Nightrider, Cannon, Camel
+                1 => new int[] { 5, 6, 7, 8, 9 },              // Fairy pieces only
+                2 => new int[] { 3, 5, 2, 6 },                 // N, Archbishop, B, Chancellor
+                3 => new int[] { 7, 1, 8, 4 },                 // Nightrider, Q, Cannon, R
+                4 => new int[] { 9, 3, 5, 2 },                 // Camel, N, Archbishop, B
+                _ => new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }
+            };
+        }
         return ((lineIdx - 1) % 3) switch
         {
             0 => new int[] { 2, 3, 4, 1, 1, 4, 3, 2 }, // B, N, R, Q, Q, R, N, B
@@ -203,6 +218,11 @@ public static class SetupManager
             2 => new Bishop(isWhite, position),
             3 => new Knight(isWhite, position),
             4 => new Rook(isWhite, position),
+            5 => new Archbishop(isWhite, position),
+            6 => new Chancellor(isWhite, position),
+            7 => new Nightrider(isWhite, position),
+            8 => new Cannon(isWhite, position),
+            9 => new Camel(isWhite, position),
             _ => new Knight(isWhite, position)
         };
     }

@@ -181,6 +181,11 @@ public partial class Board : Node2D
             PieceType.Bishop => "bishop",
             PieceType.Knight => "knight",
             PieceType.Pawn => "pawn",
+            PieceType.Archbishop => "archbishop",
+            PieceType.Chancellor => "chancellor",
+            PieceType.Nightrider => "nightrider",
+            PieceType.Cannon => "cannon",
+            PieceType.Camel => "camel",
             _ => "pawn"
         };
         string key = $"{_pieceStyle}/{typeName}-{colorCode}";

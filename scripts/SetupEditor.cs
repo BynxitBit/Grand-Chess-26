@@ -200,14 +200,22 @@ public partial class SetupEditor : Control
     private void CreatePieceButtons(HBoxContainer container, bool isWhite)
     {
         PieceType[] types = { PieceType.King, PieceType.Queen, PieceType.Rook,
-                              PieceType.Bishop, PieceType.Knight, PieceType.Pawn };
+                              PieceType.Bishop, PieceType.Knight, PieceType.Pawn,
+                              PieceType.Archbishop, PieceType.Chancellor,
+                              PieceType.Nightrider, PieceType.Cannon, PieceType.Camel };
 
         foreach (var type in types)
         {
             var button = new Button();
             button.CustomMinimumSize = new Vector2(40, 40);
-            button.Text = GetPieceSymbol(type, isWhite);
-            button.AddThemeFontSizeOverride("font_size", 24);
+            button.ExpandIcon = true;
+            button.TooltipText = GetPieceName(type);
+
+            var texture = LoadPieceTexture(type, isWhite);
+            if (texture != null)
+                button.Icon = texture;
+            else
+                button.Text = type.ToString();
 
             button.Pressed += () => SelectPiece(type, isWhite);
 
@@ -216,19 +224,42 @@ public partial class SetupEditor : Control
         }
     }
 
-    private string GetPieceSymbol(PieceType type, bool isWhite)
+    private Texture2D LoadPieceTexture(PieceType type, bool isWhite)
     {
-        return type switch
+        string colorCode = isWhite ? "w" : "b";
+        string typeName = type switch
         {
-            PieceType.King => isWhite ? "\u2654" : "\u265A",
-            PieceType.Queen => isWhite ? "\u2655" : "\u265B",
-            PieceType.Rook => isWhite ? "\u2656" : "\u265C",
-            PieceType.Bishop => isWhite ? "\u2657" : "\u265D",
-            PieceType.Knight => isWhite ? "\u2658" : "\u265E",
-            PieceType.Pawn => isWhite ? "\u2659" : "\u265F",
-            _ => "?"
+            PieceType.King => "king",
+            PieceType.Queen => "queen",
+            PieceType.Rook => "rook",
+            PieceType.Bishop => "bishop",
+            PieceType.Knight => "knight",
+            PieceType.Pawn => "pawn",
+            PieceType.Archbishop => "archbishop",
+            PieceType.Chancellor => "chancellor",
+            PieceType.Nightrider => "nightrider",
+            PieceType.Cannon => "cannon",
+            PieceType.Camel => "camel",
+            _ => "pawn"
         };
+        return GD.Load<Texture2D>($"res://assets/pieces/{_board.GetPieceStyle()}/{typeName}-{colorCode}.svg");
     }
+
+    private string GetPieceName(PieceType type) => type switch
+    {
+        PieceType.King => "King",
+        PieceType.Queen => "Queen",
+        PieceType.Rook => "Rook",
+        PieceType.Bishop => "Bishop",
+        PieceType.Knight => "Knight",
+        PieceType.Pawn => "Pawn",
+        PieceType.Archbishop => "Archbishop (Bishop + Knight)",
+        PieceType.Chancellor => "Chancellor (Rook + Knight)",
+        PieceType.Nightrider => "Nightrider (Infinite Knight)",
+        PieceType.Cannon => "Cannon (Jumps to capture)",
+        PieceType.Camel => "Camel (3,1 Leaper)",
+        _ => "?"
+    };
 
     private void SelectPiece(PieceType type, bool isWhite)
     {
@@ -241,11 +272,16 @@ public partial class SetupEditor : Control
             var btn = kvp.Value;
             if (kvp.Key == (type, isWhite))
             {
-                btn.AddThemeColorOverride("font_color", new Color("#00ff00"));
+                var selectedStyle = new StyleBoxFlat();
+                selectedStyle.BgColor = new Color("#00ff00", 0.25f);
+                selectedStyle.SetBorderWidthAll(2);
+                selectedStyle.BorderColor = new Color("#00ff00");
+                selectedStyle.SetCornerRadiusAll(4);
+                btn.AddThemeStyleboxOverride("normal", selectedStyle);
             }
             else
             {
-                btn.RemoveThemeColorOverride("font_color");
+                btn.RemoveThemeStyleboxOverride("normal");
             }
         }
     }
@@ -333,6 +369,11 @@ public partial class SetupEditor : Control
             PieceType.Bishop => new Bishop(isWhite, position),
             PieceType.Knight => new Knight(isWhite, position),
             PieceType.Pawn => new Pawn(isWhite, position),
+            PieceType.Archbishop => new Archbishop(isWhite, position),
+            PieceType.Chancellor => new Chancellor(isWhite, position),
+            PieceType.Nightrider => new Nightrider(isWhite, position),
+            PieceType.Cannon => new Cannon(isWhite, position),
+            PieceType.Camel => new Camel(isWhite, position),
             _ => new Pawn(isWhite, position)
         };
     }
@@ -506,10 +547,15 @@ public partial class SetupEditor : Control
         ClearBoard();
         _selectedPieceType = null;
 
-        // Reset button highlights
-        foreach (var btn in _pieceButtons.Values)
+        // Refresh icons in case piece style changed, and reset highlights
+        foreach (var kvp in _pieceButtons)
         {
-            btn.RemoveThemeColorOverride("font_color");
+            var (type, isWhite) = kvp.Key;
+            var btn = kvp.Value;
+            var texture = LoadPieceTexture(type, isWhite);
+            if (texture != null)
+                btn.Icon = texture;
+            btn.RemoveThemeStyleboxOverride("normal");
         }
 
         UpdateValidation();
