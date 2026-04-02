@@ -611,6 +611,11 @@ public class ChessAI
             PieceType.Rook => RookValue,
             PieceType.Queen => QueenValue,
             PieceType.King => KingValue,
+            PieceType.Archbishop => 650,   // Bishop + Knight
+            PieceType.Chancellor => 820,   // Rook + Knight
+            PieceType.Nightrider => 500,
+            PieceType.Cannon => 450,
+            PieceType.Camel => 200,
             _ => 0
         };
     }
